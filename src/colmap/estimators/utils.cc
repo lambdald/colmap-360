@@ -88,6 +88,25 @@ void ComputeSquaredSampsonError(const std::vector<Eigen::Vector2d>& points1,
   }
 }
 
+
+void ComputeSquaredSampsonError(const std::vector<Eigen::Vector3d>& points1,
+                                const std::vector<Eigen::Vector3d>& points2,
+                                const Eigen::Matrix3d& E,
+                                std::vector<double>* residuals) {
+  const size_t num_points1 = points1.size();
+  CHECK_EQ(num_points1, points2.size());
+  residuals->resize(num_points1);
+  for (size_t i = 0; i < num_points1; ++i) {
+
+    // d(p1, p2) = norm(p2*E*p1)^2 / ( Ep1.squaredNorm() + p2E.squaredNorm() )
+
+    const Eigen::Vector3d Ep1 = E * points1[i];
+    const Eigen::Vector3d p2E = E.transpose() * points2[i];
+    const double epipolar = p2E.dot(points1[i]);
+    (*residuals)[i] = epipolar * epipolar / (Ep1.squaredNorm() + p2E.squaredNorm());
+  }
+}
+
 void ComputeSquaredReprojectionError(
     const std::vector<Eigen::Vector2d>& points2D,
     const std::vector<Eigen::Vector3d>& points3D,
@@ -106,6 +125,24 @@ void ComputeSquaredReprojectionError(
     } else {
       (*residuals)[i] = std::numeric_limits<double>::max();
     }
+  }
+}
+
+
+void ComputeSquaredReprojectionError(
+    const std::vector<Eigen::Vector3d>& points2D,
+    const std::vector<Eigen::Vector3d>& points3D,
+    const Eigen::Matrix3x4d& cam_from_world,
+    std::vector<double>* residuals) {
+  const size_t num_points2D = points2D.size();
+  CHECK_EQ(num_points2D, points3D.size());
+  residuals->resize(num_points2D);
+  for (size_t i = 0; i < num_points2D; ++i) {
+    const Eigen::Vector3d point3D_in_cam =
+        cam_from_world * points3D[i].homogeneous();
+    // Check if 3D point is in front of camera.
+    (*residuals)[i] =
+        (point3D_in_cam.normalized() - points2D[i].normalized()).squaredNorm();
   }
 }
 

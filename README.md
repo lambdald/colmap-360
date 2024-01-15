@@ -1,6 +1,8 @@
 COLMAP
 ======
 
+Support panoramic camera by lidong based on colmap 3.9.
+
 About
 -----
 

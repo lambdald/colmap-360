@@ -123,7 +123,7 @@ bool EstimateGeneralizedAbsolutePose(
   for (size_t i = 0; i < points2D.size(); i++) {
     const size_t camera_idx = camera_idxs[i];
     rig_points2D[i].ray_in_cam =
-        cameras[camera_idx].CamFromImg(points2D[i]).homogeneous().normalized();
+        cameras[camera_idx].CamFromImg(points2D[i]).normalized();
     rig_points2D[i].cam_from_rig = cams_from_rig[camera_idx];
   }
 

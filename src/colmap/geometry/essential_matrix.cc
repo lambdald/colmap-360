@@ -62,8 +62,8 @@ void DecomposeEssentialMatrix(const Eigen::Matrix3d& E,
 }
 
 void PoseFromEssentialMatrix(const Eigen::Matrix3d& E,
-                             const std::vector<Eigen::Vector2d>& points1,
-                             const std::vector<Eigen::Vector2d>& points2,
+                             const std::vector<Eigen::Vector3d>& points1,
+                             const std::vector<Eigen::Vector3d>& points2,
                              Eigen::Matrix3d* R,
                              Eigen::Vector3d* t,
                              std::vector<Eigen::Vector3d>* points3D) {
@@ -95,12 +95,12 @@ Eigen::Matrix3d EssentialMatrixFromPose(const Rigid3d& cam2_from_cam1) {
 }
 
 void FindOptimalImageObservations(const Eigen::Matrix3d& E,
-                                  const Eigen::Vector2d& point1,
-                                  const Eigen::Vector2d& point2,
-                                  Eigen::Vector2d* optimal_point1,
-                                  Eigen::Vector2d* optimal_point2) {
-  const Eigen::Vector3d& point1h = point1.homogeneous();
-  const Eigen::Vector3d& point2h = point2.homogeneous();
+                                  const Eigen::Vector3d& point1,
+                                  const Eigen::Vector3d& point2,
+                                  Eigen::Vector3d* optimal_point1,
+                                  Eigen::Vector3d* optimal_point2) {
+  const Eigen::Vector3d& point1h = point1;
+  const Eigen::Vector3d& point2h = point2;
 
   Eigen::Matrix<double, 2, 3> S;
   S << 1, 0, 0, 0, 1, 0;
@@ -122,8 +122,8 @@ void FindOptimalImageObservations(const Eigen::Matrix3d& E,
 
   lambda *= (2.0 * d) / (n1.squaredNorm() + n2.squaredNorm());
 
-  *optimal_point1 = (point1h - S.transpose() * lambda * n1).hnormalized();
-  *optimal_point2 = (point2h - S.transpose() * lambda * n2).hnormalized();
+  *optimal_point1 = (point1h - S.transpose() * lambda * n1);
+  *optimal_point2 = (point2h - S.transpose() * lambda * n2);
 }
 
 Eigen::Vector3d EpipoleFromEssentialMatrix(const Eigen::Matrix3d& E,

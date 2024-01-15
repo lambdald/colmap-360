@@ -57,12 +57,14 @@ class TriangulationEstimator {
 
   struct PointData {
     PointData() {}
-    PointData(const Eigen::Vector2d& point_, const Eigen::Vector2d& point_N_)
+    // PointData(const Eigen::Vector2d& point_, const Eigen::Vector2d& point_N_)
+    //     : point(point_), point_normalized(point_N_) {}
+    PointData(const Eigen::Vector2d& point_, const Eigen::Vector3d& point_N_)
         : point(point_), point_normalized(point_N_) {}
     // Image observation in pixels. Only needs to be set for REPROJECTION_ERROR.
     Eigen::Vector2d point;
     // Normalized image observation. Must always be set.
-    Eigen::Vector2d point_normalized;
+    Eigen::Vector3d point_normalized;
   };
 
   struct PoseData {

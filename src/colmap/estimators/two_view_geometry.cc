@@ -308,6 +308,16 @@ TwoViewGeometry EstimateTwoViewGeometry(
     const std::vector<Eigen::Vector2d>& points2,
     const FeatureMatches& matches,
     const TwoViewGeometryOptions& options) {
+
+  // @lidong: support panoramic camera
+  if (camera1.model_id == CameraModelId::kPanoramic || camera2.model_id == CameraModelId::kPanoramic) {
+    for(const auto& cam: {camera1, camera2}) {
+      assert(cam.model_id == CameraModelId::kPanoramic || cam.has_prior_focal_length); 
+    }
+    return EstimateCalibratedTwoViewGeometry(
+            camera1, points1, camera2, points2, matches, options);
+  }
+
   if (options.multiple_models) {
     return EstimateMultipleTwoViewGeometries(
         camera1, points1, camera2, points2, matches, options);
@@ -339,9 +349,9 @@ bool EstimateTwoViewGeometryPose(const Camera& camera1,
   }
 
   // Extract normalized inlier points.
-  std::vector<Eigen::Vector2d> inlier_points1_normalized;
+  std::vector<Eigen::Vector3d> inlier_points1_normalized;
   inlier_points1_normalized.reserve(geometry->inlier_matches.size());
-  std::vector<Eigen::Vector2d> inlier_points2_normalized;
+  std::vector<Eigen::Vector3d> inlier_points2_normalized;
   inlier_points2_normalized.reserve(geometry->inlier_matches.size());
   for (const auto& match : geometry->inlier_matches) {
     inlier_points1_normalized.push_back(
@@ -430,8 +440,8 @@ TwoViewGeometry EstimateCalibratedTwoViewGeometry(
   // Extract corresponding points.
   std::vector<Eigen::Vector2d> matched_points1(matches.size());
   std::vector<Eigen::Vector2d> matched_points2(matches.size());
-  std::vector<Eigen::Vector2d> matched_points1_normalized(matches.size());
-  std::vector<Eigen::Vector2d> matched_points2_normalized(matches.size());
+  std::vector<Eigen::Vector3d> matched_points1_normalized(matches.size());
+  std::vector<Eigen::Vector3d> matched_points2_normalized(matches.size());
   for (size_t i = 0; i < matches.size(); ++i) {
     const point2D_t idx1 = matches[i].point2D_idx1;
     const point2D_t idx2 = matches[i].point2D_idx2;

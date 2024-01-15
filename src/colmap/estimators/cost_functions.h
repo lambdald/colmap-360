@@ -72,10 +72,12 @@ class ReprojErrorCostFunction {
         EigenQuaternionMap<T>(cam_from_world_rotation) *
             EigenVector3Map<T>(point3D) +
         EigenVector3Map<T>(cam_from_world_translation);
+
+    const Eigen::Matrix<T, 3, 1> point3d_norm = point3D_in_cam.normalized();
     CameraModel::ImgFromCam(camera_params,
-                            point3D_in_cam[0],
-                            point3D_in_cam[1],
-                            point3D_in_cam[2],
+                            point3d_norm[0],
+                            point3d_norm[1],
+                            point3d_norm[2],
                             &residuals[0],
                             &residuals[1]);
     residuals[0] -= T(observed_x_);
@@ -116,10 +118,13 @@ class ReprojErrorConstantPoseCostFunction {
     const Eigen::Matrix<T, 3, 1> point3D_in_cam =
         cam_from_world_.rotation.cast<T>() * EigenVector3Map<T>(point3D) +
         cam_from_world_.translation.cast<T>();
+
+    const Eigen::Matrix<T, 3, 1> point3d_norm = point3D_in_cam.normalized();
+
     CameraModel::ImgFromCam(camera_params,
-                            point3D_in_cam[0],
-                            point3D_in_cam[1],
-                            point3D_in_cam[2],
+                            point3d_norm[0],
+                            point3d_norm[1],
+                            point3d_norm[2],
                             &residuals[0],
                             &residuals[1]);
     residuals[0] -= T(observed_x_);
@@ -170,10 +175,13 @@ class ReprojErrorConstantPoint3DCostFunction {
     const Eigen::Matrix<T, 3, 1> point3D_in_cam =
         EigenQuaternionMap<T>(cam_from_world_rotation) * point3D +
         EigenVector3Map<T>(cam_from_world_translation);
+
+    const Eigen::Matrix<T, 3, 1> point3d_norm = point3D_in_cam.normalized();
+
     CameraModel::ImgFromCam(camera_params,
-                            point3D_in_cam[0],
-                            point3D_in_cam[1],
-                            point3D_in_cam[2],
+                            point3d_norm[0],
+                            point3d_norm[1],
+                            point3d_norm[2],
                             &residuals[0],
                             &residuals[1]);
     residuals[0] -= T(observed_x_);
@@ -228,10 +236,13 @@ class RigReprojErrorCostFunction {
                  EigenVector3Map<T>(point3D) +
              EigenVector3Map<T>(rig_from_world_translation)) +
         EigenVector3Map<T>(cam_from_rig_translation);
+
+    const Eigen::Matrix<T, 3, 1> point3d_norm = point3D_in_cam.normalized();
+
     CameraModel::ImgFromCam(camera_params,
-                            point3D_in_cam[0],
-                            point3D_in_cam[1],
-                            point3D_in_cam[2],
+                            point3d_norm[0],
+                            point3d_norm[1],
+                            point3d_norm[2],
                             &residuals[0],
                             &residuals[1]);
     residuals[0] -= T(observed_x_);
@@ -253,11 +264,11 @@ class RigReprojErrorCostFunction {
 // and should be down-projected using `SphereManifold`.
 class SampsonErrorCostFunction {
  public:
-  SampsonErrorCostFunction(const Eigen::Vector2d& x1, const Eigen::Vector2d& x2)
-      : x1_(x1(0)), y1_(x1(1)), x2_(x2(0)), y2_(x2(1)) {}
+  SampsonErrorCostFunction(const Eigen::Vector3d& x1, const Eigen::Vector3d& x2)
+      : x1_(x1(0)), y1_(x1(1)), z1_(x1(2)), x2_(x2(0)), y2_(x2(1)), z2_(x2(2)) {}
 
-  static ceres::CostFunction* Create(const Eigen::Vector2d& x1,
-                                     const Eigen::Vector2d& x2) {
+  static ceres::CostFunction* Create(const Eigen::Vector3d& x1,
+                                     const Eigen::Vector3d& x2) {
     return (new ceres::AutoDiffCostFunction<SampsonErrorCostFunction, 1, 4, 3>(
         new SampsonErrorCostFunction(x1, x2)));
   }
@@ -279,16 +290,15 @@ class SampsonErrorCostFunction {
     const Eigen::Matrix<T, 3, 3> E = t_x * R;
 
     // Homogeneous image coordinates.
-    const Eigen::Matrix<T, 3, 1> x1_h(T(x1_), T(y1_), T(1));
-    const Eigen::Matrix<T, 3, 1> x2_h(T(x2_), T(y2_), T(1));
+    const Eigen::Matrix<T, 3, 1> x1_h{T(x1_), T(y1_), T(z1_)};
+    const Eigen::Matrix<T, 3, 1> x2_h{T(x2_), T(y2_), T(z2_)};
 
     // Squared sampson error.
     const Eigen::Matrix<T, 3, 1> Ex1 = E * x1_h;
     const Eigen::Matrix<T, 3, 1> Etx2 = E.transpose() * x2_h;
     const T x2tEx1 = x2_h.transpose() * Ex1;
     residuals[0] = x2tEx1 * x2tEx1 /
-                   (Ex1(0) * Ex1(0) + Ex1(1) * Ex1(1) + Etx2(0) * Etx2(0) +
-                    Etx2(1) * Etx2(1));
+                   (Ex1.squaredNorm() + Etx2.squaredNorm());
 
     return true;
   }
@@ -296,8 +306,10 @@ class SampsonErrorCostFunction {
  private:
   const double x1_;
   const double y1_;
+  const double z1_;
   const double x2_;
   const double y2_;
+  const double z2_;
 };
 
 inline void SetQuaternionManifold(ceres::Problem* problem, double* quat_xyzw) {

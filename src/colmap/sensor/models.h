@@ -91,6 +91,7 @@ enum class CameraModelId {
   kSimpleRadialFisheye = 8,
   kRadialFisheye = 9,
   kThinPrismFisheye = 10,
+  kPanoramic = 11,
 };
 
 #ifndef CAMERA_MODEL_DEFINITIONS
@@ -143,7 +144,8 @@ enum class CameraModelId {
   CAMERA_MODEL_CASE(OpenCVFisheyeCameraModel)       \
   CAMERA_MODEL_CASE(FullOpenCVCameraModel)          \
   CAMERA_MODEL_CASE(FOVCameraModel)                 \
-  CAMERA_MODEL_CASE(ThinPrismFisheyeCameraModel)
+  CAMERA_MODEL_CASE(ThinPrismFisheyeCameraModel)    \
+  CAMERA_MODEL_CASE(PanoramicCameraModel)
 #endif
 
 #ifndef CAMERA_MODEL_SWITCH_CASES
@@ -371,6 +373,22 @@ struct ThinPrismFisheyeCameraModel
   CAMERA_MODEL_DEFINITIONS(
       CameraModelId::kThinPrismFisheye, "THIN_PRISM_FISHEYE", 2, 2, 8)
 };
+
+
+// Camera model with 360° view using equirectangular projection to format 360 degrees image.
+//
+// This camera model is described in
+//
+//  https://en.wikipedia.org/wiki/Equirectangular_projection
+//
+
+
+struct PanoramicCameraModel
+    : public BaseCameraModel<PanoramicCameraModel> {
+  CAMERA_MODEL_DEFINITIONS(
+      CameraModelId::kPanoramic, "PANORAMIC", 1, 2, 0)
+};
+
 
 // Check whether camera model with given name or identifier exists.
 bool ExistsCameraModelWithName(const std::string& model_name);
@@ -1536,6 +1554,74 @@ void ThinPrismFisheyeCameraModel::Distortion(
   *du = u * radial + T(2) * p1 * uv + p2 * (r2 + T(2) * u2) + sx1 * r2;
   *dv = v * radial + T(2) * p2 * uv + p1 * (r2 + T(2) * v2) + sy1 * r2;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// PanoramicCameraModel
+
+std::string PanoramicCameraModel::InitializeParamsInfo() {
+  return "f, cx, cy";
+}
+
+std::array<size_t, 1> PanoramicCameraModel::InitializeFocalLengthIdxs() {
+  return {0};
+}
+
+std::array<size_t, 2>
+PanoramicCameraModel::InitializePrincipalPointIdxs() {
+  return {1, 2};
+}
+
+std::array<size_t, 0> PanoramicCameraModel::InitializeExtraParamsIdxs() {
+  return {};
+}
+
+std::vector<double> PanoramicCameraModel::InitializeParams(
+    const double focal_length, const size_t width, const size_t height) {
+  return {height / M_PI, width / 2.0, height / 2.0};
+}
+
+template <typename T>
+void PanoramicCameraModel::ImgFromCam(
+    const T* params, T u, T v, T w, T* x, T* y) {
+  const T f = params[0];
+  const T c1 = params[1];
+  const T c2 = params[2];
+
+  T lon = ceres::atan2(u, w);
+  T lat = ceres::atan2(v, ceres::hypot(u, w));
+
+  *x = lon * f + c1;
+  *y = lat * f + c2;
+}
+
+template <typename T>
+void PanoramicCameraModel::CamFromImg(
+    const T* params, const T x, const T y, T* u, T* v, T* w) {
+  const T f = params[0];
+  const T c1 = params[1];
+  const T c2 = params[2];
+  auto p = (x - c1) / f;
+  auto t = (y - c2) / f;
+  auto cos_t = ceres::cos(t);
+  *u = cos_t * ceres::sin(p);
+  *v = ceres::sin(t);
+  *w = cos_t * ceres::cos(p);
+}
+
+template <>
+template <typename T>
+T BaseCameraModel<PanoramicCameraModel>::CamFromImgThreshold(const T* params,
+                                                    const T threshold) {
+
+  const T kErrorFactorNormalPlaneToSphere = T(1.1244554237496478);
+  T mean_focal_length = 0;
+  for (const size_t idx : PanoramicCameraModel::focal_length_idxs) {
+    mean_focal_length += params[idx];
+  }
+  mean_focal_length /= PanoramicCameraModel::focal_length_idxs.size();
+  return kErrorFactorNormalPlaneToSphere * threshold / mean_focal_length;
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 

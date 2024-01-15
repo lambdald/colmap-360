@@ -568,6 +568,8 @@ size_t Reconstruction::FilterAllPoints3D(const double max_reproj_error,
 
 size_t Reconstruction::FilterObservationsWithNegativeDepth() {
   size_t num_filtered = 0;
+  // @lidong: support panoramic camera with negative depth.
+  return num_filtered;
   for (const auto image_id : reg_image_ids_) {
     const class Image& image = Image(image_id);
     const Eigen::Matrix3x4d cam_from_world = image.CamFromWorld().ToMatrix();

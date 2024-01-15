@@ -48,8 +48,8 @@ namespace colmap {
 //    http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.86.8769
 class EssentialMatrixFivePointEstimator {
  public:
-  typedef Eigen::Vector2d X_t;
-  typedef Eigen::Vector2d Y_t;
+  typedef Eigen::Vector3d X_t;
+  typedef Eigen::Vector3d Y_t;
   typedef Eigen::Matrix3d M_t;
 
   // The minimum number of samples needed to estimate a model.

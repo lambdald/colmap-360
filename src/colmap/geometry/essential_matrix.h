@@ -68,8 +68,8 @@ void DecomposeEssentialMatrix(const Eigen::Matrix3d& E,
 // @param t            Most probable 3x1 translation vector.
 // @param points3D     Triangulated 3D points infront of camera.
 void PoseFromEssentialMatrix(const Eigen::Matrix3d& E,
-                             const std::vector<Eigen::Vector2d>& points1,
-                             const std::vector<Eigen::Vector2d>& points2,
+                             const std::vector<Eigen::Vector3d>& points1,
+                             const std::vector<Eigen::Vector3d>& points2,
                              Eigen::Matrix3d* R,
                              Eigen::Vector3d* t,
                              std::vector<Eigen::Vector3d>* points3D);
@@ -101,10 +101,10 @@ Eigen::Matrix3d EssentialMatrixFromPose(const Rigid3d& cam2_from_cam1);
 // @param optimal_point1   Estimated optimal image point in the first image.
 // @param optimal_point2   Estimated optimal image point in the second image.
 void FindOptimalImageObservations(const Eigen::Matrix3d& E,
-                                  const Eigen::Vector2d& point1,
-                                  const Eigen::Vector2d& point2,
-                                  Eigen::Vector2d* optimal_point1,
-                                  Eigen::Vector2d* optimal_point2);
+                                  const Eigen::Vector3d& point1,
+                                  const Eigen::Vector3d& point2,
+                                  Eigen::Vector3d* optimal_point1,
+                                  Eigen::Vector3d* optimal_point2);
 
 // Compute the location of the epipole in homogeneous coordinates.
 //

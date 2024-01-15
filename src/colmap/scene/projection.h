@@ -76,7 +76,13 @@ double CalculateAngularError(const Eigen::Vector2d& point2D,
 double CalculateNormalizedAngularError(const Eigen::Vector2d& point2D,
                                        const Eigen::Vector3d& point3D,
                                        const Rigid3d& cam_from_world);
+double CalculateNormalizedAngularError(const Eigen::Vector3d& point2D,
+                                       const Eigen::Vector3d& point3D,
+                                       const Rigid3d& cam_from_world);
 double CalculateNormalizedAngularError(const Eigen::Vector2d& point2D,
+                                       const Eigen::Vector3d& point3D,
+                                       const Eigen::Matrix3x4d& cam_from_world);
+double CalculateNormalizedAngularError(const Eigen::Vector3d& point2D,
                                        const Eigen::Vector3d& point3D,
                                        const Eigen::Matrix3x4d& cam_from_world);
 
