@@ -33,6 +33,7 @@
 #include "colmap/controllers/feature_matching.h"
 #include "colmap/controllers/image_reader.h"
 #include "colmap/controllers/incremental_mapper.h"
+#include "colmap/controllers/sequential_keyframe_mapper.h"
 #include "colmap/estimators/bundle_adjustment.h"
 #include "colmap/estimators/two_view_geometry.h"
 #include "colmap/feature/sift.h"
@@ -68,6 +69,7 @@ OptionManager::OptionManager(bool add_project_options) {
   image_pairs_matching = std::make_shared<ImagePairsMatchingOptions>();
   bundle_adjustment = std::make_shared<BundleAdjustmentOptions>();
   mapper = std::make_shared<IncrementalMapperOptions>();
+  sequential_keyframe_mapper = std::make_shared<SequentialKeyframeMapperOptions>();
   patch_match_stereo = std::make_shared<mvs::PatchMatchOptions>();
   stereo_fusion = std::make_shared<mvs::StereoFusionOptions>();
   poisson_meshing = std::make_shared<mvs::PoissonMeshingOptions>();
@@ -102,6 +104,13 @@ void OptionManager::ModifyForVideoData() {
   mapper->max_focal_length_ratio = 10;
   mapper->max_extra_param = std::numeric_limits<double>::max();
   stereo_fusion->min_num_pixels = 15;
+
+  sequential_keyframe_mapper->mapper.init_min_tri_angle /= 2;
+  sequential_keyframe_mapper->ba_global_images_ratio = 1.4;
+  sequential_keyframe_mapper->ba_global_points_ratio = 1.4;
+  sequential_keyframe_mapper->min_focal_length_ratio = 0.1;
+  sequential_keyframe_mapper->max_focal_length_ratio = 10;
+  sequential_keyframe_mapper->max_extra_param = std::numeric_limits<double>::max();
 }
 
 void OptionManager::ModifyForInternetData() {
@@ -593,6 +602,129 @@ void OptionManager::AddMapperOptions() {
   AddAndRegisterDefaultOption("Mapper.tri_ignore_two_view_tracks",
                               &mapper->triangulation.ignore_two_view_tracks);
 }
+
+void OptionManager::AddSequentialKeyframeMapperOptions() {
+   if (added_sequential_keyframe_mapper_options_) {
+    return;
+  }
+  added_sequential_keyframe_mapper_options_ = true;
+
+  AddAndRegisterDefaultOption("Mapper.min_num_matches",
+                              &sequential_keyframe_mapper->min_num_matches);
+  AddAndRegisterDefaultOption("Mapper.ignore_watermarks",
+                              &sequential_keyframe_mapper->ignore_watermarks);
+  AddAndRegisterDefaultOption("Mapper.multiple_models",
+                              &sequential_keyframe_mapper->multiple_models);
+  AddAndRegisterDefaultOption("Mapper.max_num_models", &sequential_keyframe_mapper->max_num_models);
+  AddAndRegisterDefaultOption("Mapper.max_model_overlap",
+                              &sequential_keyframe_mapper->max_model_overlap);
+  AddAndRegisterDefaultOption("Mapper.min_model_size", &sequential_keyframe_mapper->min_model_size);
+  AddAndRegisterDefaultOption("Mapper.init_image_id1", &sequential_keyframe_mapper->init_image_id1);
+  AddAndRegisterDefaultOption("Mapper.init_image_id2", &sequential_keyframe_mapper->init_image_id2);
+  AddAndRegisterDefaultOption("Mapper.init_num_trials",
+                              &sequential_keyframe_mapper->init_num_trials);
+  AddAndRegisterDefaultOption("Mapper.extract_colors", &sequential_keyframe_mapper->extract_colors);
+  AddAndRegisterDefaultOption("Mapper.num_threads", &sequential_keyframe_mapper->num_threads);
+  AddAndRegisterDefaultOption("Mapper.min_focal_length_ratio",
+                              &sequential_keyframe_mapper->min_focal_length_ratio);
+  AddAndRegisterDefaultOption("Mapper.max_focal_length_ratio",
+                              &sequential_keyframe_mapper->max_focal_length_ratio);
+  AddAndRegisterDefaultOption("Mapper.max_extra_param",
+                              &sequential_keyframe_mapper->max_extra_param);
+  AddAndRegisterDefaultOption("Mapper.ba_refine_focal_length",
+                              &sequential_keyframe_mapper->ba_refine_focal_length);
+  AddAndRegisterDefaultOption("Mapper.ba_refine_principal_point",
+                              &sequential_keyframe_mapper->ba_refine_principal_point);
+  AddAndRegisterDefaultOption("Mapper.ba_refine_extra_params",
+                              &sequential_keyframe_mapper->ba_refine_extra_params);
+  AddAndRegisterDefaultOption(
+      "Mapper.ba_min_num_residuals_for_multi_threading",
+      &sequential_keyframe_mapper->ba_min_num_residuals_for_multi_threading);
+  AddAndRegisterDefaultOption("Mapper.ba_local_num_images",
+                              &sequential_keyframe_mapper->ba_local_num_images);
+  AddAndRegisterDefaultOption("Mapper.ba_local_function_tolerance",
+                              &sequential_keyframe_mapper->ba_local_function_tolerance);
+  AddAndRegisterDefaultOption("Mapper.ba_local_max_num_iterations",
+                              &sequential_keyframe_mapper->ba_local_max_num_iterations);
+  AddAndRegisterDefaultOption("Mapper.ba_global_images_ratio",
+                              &sequential_keyframe_mapper->ba_global_images_ratio);
+  AddAndRegisterDefaultOption("Mapper.ba_global_points_ratio",
+                              &sequential_keyframe_mapper->ba_global_points_ratio);
+  AddAndRegisterDefaultOption("Mapper.ba_global_images_freq",
+                              &sequential_keyframe_mapper->ba_global_images_freq);
+  AddAndRegisterDefaultOption("Mapper.ba_global_points_freq",
+                              &sequential_keyframe_mapper->ba_global_points_freq);
+  AddAndRegisterDefaultOption("Mapper.ba_global_function_tolerance",
+                              &sequential_keyframe_mapper->ba_global_function_tolerance);
+  AddAndRegisterDefaultOption("Mapper.ba_global_max_num_iterations",
+                              &sequential_keyframe_mapper->ba_global_max_num_iterations);
+  AddAndRegisterDefaultOption("Mapper.ba_global_max_refinements",
+                              &sequential_keyframe_mapper->ba_global_max_refinements);
+  AddAndRegisterDefaultOption("Mapper.ba_global_max_refinement_change",
+                              &sequential_keyframe_mapper->ba_global_max_refinement_change);
+  AddAndRegisterDefaultOption("Mapper.ba_local_max_refinements",
+                              &sequential_keyframe_mapper->ba_local_max_refinements);
+  AddAndRegisterDefaultOption("Mapper.ba_local_max_refinement_change",
+                              &sequential_keyframe_mapper->ba_local_max_refinement_change);
+  AddAndRegisterDefaultOption("Mapper.snapshot_path", &sequential_keyframe_mapper->snapshot_path);
+  AddAndRegisterDefaultOption("Mapper.snapshot_images_freq",
+                              &sequential_keyframe_mapper->snapshot_images_freq);
+  AddAndRegisterDefaultOption("Mapper.fix_existing_images",
+                              &sequential_keyframe_mapper->fix_existing_images);
+
+  // IncrementalMapper.
+  AddAndRegisterDefaultOption("Mapper.init_min_num_inliers",
+                              &sequential_keyframe_mapper->mapper.init_min_num_inliers);
+  AddAndRegisterDefaultOption("Mapper.init_max_error",
+                              &sequential_keyframe_mapper->mapper.init_max_error);
+  AddAndRegisterDefaultOption("Mapper.init_max_forward_motion",
+                              &sequential_keyframe_mapper->mapper.init_max_forward_motion);
+  AddAndRegisterDefaultOption("Mapper.init_min_tri_angle",
+                              &sequential_keyframe_mapper->mapper.init_min_tri_angle);
+  AddAndRegisterDefaultOption("Mapper.init_max_reg_trials",
+                              &sequential_keyframe_mapper->mapper.init_max_reg_trials);
+  AddAndRegisterDefaultOption("Mapper.abs_pose_max_error",
+                              &sequential_keyframe_mapper->mapper.abs_pose_max_error);
+  AddAndRegisterDefaultOption("Mapper.abs_pose_min_num_inliers",
+                              &sequential_keyframe_mapper->mapper.abs_pose_min_num_inliers);
+  AddAndRegisterDefaultOption("Mapper.abs_pose_min_inlier_ratio",
+                              &sequential_keyframe_mapper->mapper.abs_pose_min_inlier_ratio);
+  AddAndRegisterDefaultOption("Mapper.filter_max_reproj_error",
+                              &sequential_keyframe_mapper->mapper.filter_max_reproj_error);
+  AddAndRegisterDefaultOption("Mapper.filter_min_tri_angle",
+                              &sequential_keyframe_mapper->mapper.filter_min_tri_angle);
+  AddAndRegisterDefaultOption("Mapper.max_reg_trials",
+                              &sequential_keyframe_mapper->mapper.max_reg_trials);
+  AddAndRegisterDefaultOption("Mapper.local_ba_min_tri_angle",
+                              &sequential_keyframe_mapper->mapper.local_ba_min_tri_angle);
+
+  // IncrementalTriangulator.
+  AddAndRegisterDefaultOption("Mapper.tri_max_transitivity",
+                              &sequential_keyframe_mapper->triangulation.max_transitivity);
+  AddAndRegisterDefaultOption("Mapper.tri_create_max_angle_error",
+                              &sequential_keyframe_mapper->triangulation.create_max_angle_error);
+  AddAndRegisterDefaultOption("Mapper.tri_continue_max_angle_error",
+                              &sequential_keyframe_mapper->triangulation.continue_max_angle_error);
+  AddAndRegisterDefaultOption("Mapper.tri_merge_max_reproj_error",
+                              &sequential_keyframe_mapper->triangulation.merge_max_reproj_error);
+  AddAndRegisterDefaultOption("Mapper.tri_complete_max_reproj_error",
+                              &sequential_keyframe_mapper->triangulation.complete_max_reproj_error);
+  AddAndRegisterDefaultOption("Mapper.tri_complete_max_transitivity",
+                              &sequential_keyframe_mapper->triangulation.complete_max_transitivity);
+  AddAndRegisterDefaultOption("Mapper.tri_re_max_angle_error",
+                              &sequential_keyframe_mapper->triangulation.re_max_angle_error);
+  AddAndRegisterDefaultOption("Mapper.tri_re_min_ratio",
+                              &sequential_keyframe_mapper->triangulation.re_min_ratio);
+  AddAndRegisterDefaultOption("Mapper.tri_re_max_trials",
+                              &sequential_keyframe_mapper->triangulation.re_max_trials);
+  AddAndRegisterDefaultOption("Mapper.tri_min_angle",
+                              &sequential_keyframe_mapper->triangulation.min_angle);
+  AddAndRegisterDefaultOption("Mapper.tri_ignore_two_view_tracks",
+                              &sequential_keyframe_mapper->triangulation.ignore_two_view_tracks);
+  AddAndRegisterDefaultOption("Mapper.num_adjacent", &sequential_keyframe_mapper->mapper.num_adjacent);
+
+}
+
 
 void OptionManager::AddPatchMatchStereoOptions() {
   if (added_patch_match_stereo_options_) {

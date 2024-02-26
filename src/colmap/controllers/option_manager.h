@@ -50,6 +50,7 @@ struct ImagePairsMatchingOptions;
 struct BundleAdjustmentOptions;
 struct IncrementalMapperOptions;
 struct RenderOptions;
+struct SequentialKeyframeMapperOptions;
 
 namespace mvs {
 struct PatchMatchOptions;
@@ -92,6 +93,7 @@ class OptionManager {
   void AddImagePairsMatchingOptions();
   void AddBundleAdjustmentOptions();
   void AddMapperOptions();
+  void AddSequentialKeyframeMapperOptions();
   void AddPatchMatchStereoOptions();
   void AddStereoFusionOptions();
   void AddPoissonMeshingOptions();
@@ -135,6 +137,7 @@ class OptionManager {
 
   std::shared_ptr<BundleAdjustmentOptions> bundle_adjustment;
   std::shared_ptr<IncrementalMapperOptions> mapper;
+  std::shared_ptr<SequentialKeyframeMapperOptions> sequential_keyframe_mapper;
 
   std::shared_ptr<mvs::PatchMatchOptions> patch_match_stereo;
   std::shared_ptr<mvs::StereoFusionOptions> stereo_fusion;
@@ -177,6 +180,7 @@ class OptionManager {
   bool added_image_pairs_match_options_;
   bool added_ba_options_;
   bool added_mapper_options_;
+  bool added_sequential_keyframe_mapper_options_;
   bool added_patch_match_stereo_options_;
   bool added_stereo_fusion_options_;
   bool added_poisson_meshing_options_;

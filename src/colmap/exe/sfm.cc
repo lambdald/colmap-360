@@ -33,6 +33,7 @@
 #include "colmap/controllers/bundle_adjustment.h"
 #include "colmap/controllers/hierarchical_mapper.h"
 #include "colmap/controllers/option_manager.h"
+#include "colmap/controllers/sequential_keyframe_mapper.h"
 #include "colmap/estimators/similarity_transform.h"
 #include "colmap/exe/gui.h"
 #include "colmap/scene/reconstruction.h"
@@ -234,6 +235,116 @@ int RunMapper(int argc, char** argv) {
   }
 
   IncrementalMapperController mapper(options.mapper,
+                                     *options.image_path,
+                                     *options.database_path,
+                                     reconstruction_manager);
+
+  // In case a new reconstruction is started, write results of individual sub-
+  // models to as their reconstruction finishes instead of writing all results
+  // after all reconstructions finished.
+  size_t prev_num_reconstructions = 0;
+  if (input_path == "") {
+    mapper.AddCallback(
+        IncrementalMapperController::LAST_IMAGE_REG_CALLBACK, [&]() {
+          // If the number of reconstructions has not changed, the last model
+          // was discarded for some reason.
+          if (reconstruction_manager->Size() > prev_num_reconstructions) {
+            const std::string reconstruction_path = JoinPaths(
+                output_path, std::to_string(prev_num_reconstructions));
+            CreateDirIfNotExists(reconstruction_path);
+            reconstruction_manager->Get(prev_num_reconstructions)
+                ->Write(reconstruction_path);
+            options.Write(JoinPaths(reconstruction_path, "project.ini"));
+            prev_num_reconstructions = reconstruction_manager->Size();
+          }
+        });
+  }
+
+  mapper.Start();
+  mapper.Wait();
+
+  if (reconstruction_manager->Size() == 0) {
+    LOG(ERROR) << "failed to create sparse model";
+    return EXIT_FAILURE;
+  }
+
+  // In case the reconstruction is continued from an existing reconstruction, do
+  // not create sub-folders but directly write the results.
+  if (input_path != "" && reconstruction_manager->Size() > 0) {
+    const auto& reconstruction = reconstruction_manager->Get(0);
+
+    // Map the coordinate back to the original coordinate frame.
+    if (options.mapper->fix_existing_images) {
+      std::vector<Eigen::Vector3d> new_fixed_image_positions;
+      new_fixed_image_positions.reserve(fixed_image_ids.size());
+      for (const image_t image_id : fixed_image_ids) {
+        new_fixed_image_positions.push_back(
+            reconstruction->Image(image_id).ProjectionCenter());
+      }
+      Sim3d orig_from_new;
+      EstimateSim3d(
+          new_fixed_image_positions, orig_fixed_image_positions, orig_from_new);
+      reconstruction->Transform(orig_from_new);
+    }
+
+    reconstruction->Write(output_path);
+  }
+
+  return EXIT_SUCCESS;
+}
+
+int RunSequentialKeyframeMapper(int argc, char** argv) {
+  std::string input_path;
+  std::string output_path;
+  std::string image_list_path;
+
+  OptionManager options;
+  options.AddDatabaseOptions();
+  options.AddImageOptions();
+  options.AddDefaultOption("input_path", &input_path);
+  options.AddRequiredOption("output_path", &output_path);
+  options.AddDefaultOption("image_list_path", &image_list_path);
+  options.ModifyForVideoData();
+  options.AddSequentialKeyframeMapperOptions();
+  options.Parse(argc, argv);
+
+  if (!ExistsDir(output_path)) {
+    LOG(ERROR) << "`output_path` is not a directory.";
+    return EXIT_FAILURE;
+  }
+
+  if (!image_list_path.empty()) {
+    const auto image_names = ReadTextFileLines(image_list_path);
+    options.mapper->image_names =
+        std::unordered_set<std::string>(image_names.begin(), image_names.end());
+  }
+
+  auto reconstruction_manager = std::make_shared<ReconstructionManager>();
+  if (input_path != "") {
+    if (!ExistsDir(input_path)) {
+      LOG(ERROR) << "`input_path` is not a directory.";
+      return EXIT_FAILURE;
+    }
+    reconstruction_manager->Read(input_path);
+  }
+
+  // If fix_existing_images is enabled, we store the initial positions of
+  // existing images in order to transform them back to the original coordinate
+  // frame, as the reconstruction is normalized multiple times for numerical
+  // stability.
+  std::vector<Eigen::Vector3d> orig_fixed_image_positions;
+  std::vector<image_t> fixed_image_ids;
+  if (options.mapper->fix_existing_images) {
+    const auto& reconstruction = reconstruction_manager->Get(0);
+    fixed_image_ids = reconstruction->RegImageIds();
+    orig_fixed_image_positions.reserve(fixed_image_ids.size());
+    for (const image_t image_id : fixed_image_ids) {
+      orig_fixed_image_positions.push_back(
+          reconstruction->Image(image_id).ProjectionCenter());
+    }
+  }
+
+  SequentialKeyframeMapperController mapper(options.sequential_keyframe_mapper,
                                      *options.image_path,
                                      *options.database_path,
                                      reconstruction_manager);
