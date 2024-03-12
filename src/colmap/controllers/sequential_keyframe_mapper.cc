@@ -301,23 +301,58 @@ void SequentialKeyframeMapperController::Run() {
   SequentialKeyframeMapper::Options init_mapper_options = options_->Mapper();
   Reconstruct(init_mapper_options);
 
-  const size_t kNumInitRelaxations = 2;
+  const size_t kNumInitRelaxations = 5;
+  const float kMinNumRegImageRatio = 0.2;
+  const int kMinNumRegImage = database_cache_->NumImages() * kMinNumRegImageRatio;
   for (size_t i = 0; i < kNumInitRelaxations; ++i) {
-    if (reconstruction_manager_->Size() > 0 || IsStopped()) {
+    if (IsStopped()) {
       break;
     }
 
-    LOG(INFO) << "=> Relaxing the initialization constraints.";
+    if(reconstruction_manager_->Size() > 0 && reconstruction_manager_->Get(0)->NumRegImages() > kMinNumRegImage) {
+        break;
+    }
+
+    if (reconstruction_manager_->Size() > 0) {
+      reconstruction_manager_->Clear();
+    }
+
+
+    LOG(INFO) << "=> Relaxing the initialization constraints [init_min_num_inliers].";
     init_mapper_options.init_min_num_inliers /= 2;
     Reconstruct(init_mapper_options);
 
-    if (reconstruction_manager_->Size() > 0 || IsStopped()) {
+    if (IsStopped()) {
       break;
     }
 
-    LOG(INFO) << "=> Relaxing the initialization constraints.";
+    if(reconstruction_manager_->Size() > 0 && reconstruction_manager_->Get(0)->NumRegImages() > kMinNumRegImage) {
+        break;
+    }
+    if (reconstruction_manager_->Size() > 0) {
+      reconstruction_manager_->Clear();
+    }
+    LOG(INFO) << "=> Relaxing the initialization constraints [init_min_tri_angle].";
     init_mapper_options.init_min_tri_angle /= 2;
     Reconstruct(init_mapper_options);
+
+
+    if (IsStopped()) {
+      break;
+    }
+
+    if(reconstruction_manager_->Size() > 0 && reconstruction_manager_->Get(0)->NumRegImages() > kMinNumRegImage) {
+        break;
+    }
+    if (reconstruction_manager_->Size() > 0) {
+      reconstruction_manager_->Clear();
+    }
+
+    LOG(INFO) << "=> Relaxing the initialization constraints [num_adjacent].";
+    init_mapper_options.num_adjacent /= 2;
+    Reconstruct(init_mapper_options);
+
+
   }
 
   GetTimer().PrintMinutes();
@@ -370,6 +405,8 @@ void SequentialKeyframeMapperController::Reconstruct(
 
   for (int num_trials = 0; num_trials < options_->init_num_trials;
        ++num_trials) {
+
+    LOG(INFO) << "==> Begin trial " << num_trials;
     BlockIfPaused();
     if (IsStopped()) {
       break;
@@ -477,6 +514,7 @@ void SequentialKeyframeMapperController::Reconstruct(
     while (reg_next_success) {
       BlockIfPaused();
       if (IsStopped()) {
+        LOG(INFO) << "Stop reconstruction...";
         break;
       }
 
@@ -486,6 +524,7 @@ void SequentialKeyframeMapperController::Reconstruct(
           mapper.FindNextImages(options_->Mapper());
 
       if (next_images.empty()) {
+        LOG(INFO) << "=> No images to register.";
         break;
       }
 
@@ -539,7 +578,7 @@ void SequentialKeyframeMapperController::Reconstruct(
           }
 
           Callback(NEXT_IMAGE_REG_CALLBACK);
-
+          LOG(INFO) << "=> Register Done.";
           break;
         } else {
           LOG(INFO) << "=> Could not register, trying another image.";
@@ -572,6 +611,8 @@ void SequentialKeyframeMapperController::Reconstruct(
         prev_reg_next_success = reg_next_success;
       }
     }
+
+    LOG(INFO)<< "Reconstruction is stopped.";
 
     if (IsStopped()) {
       mapper.EndReconstruction(/*discard=*/false);
@@ -610,6 +651,7 @@ void SequentialKeyframeMapperController::Reconstruct(
         reconstruction_manager_->Size() >=
             static_cast<size_t>(options_->max_num_models) ||
         total_num_reg_images >= database_cache_->NumImages() - 1) {
+      LOG(INFO) << "Stop reconstruction...";
       break;
     }
   }

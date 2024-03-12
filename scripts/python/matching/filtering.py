@@ -439,6 +439,7 @@ class MatchFilter:
         self.copy_db(
             self.get_abspath(self.config.input_database_name), self.get_abspath(self.config.output_database_name)
         )
+        self.get_abspath(self.config.debug_reldir).mkdir(parents=True, exist_ok=True)
         multi_view_matches = self.load_data_from_colmap_database(self.get_abspath(self.config.input_database_name))
         print('init matches', multi_view_matches)
 

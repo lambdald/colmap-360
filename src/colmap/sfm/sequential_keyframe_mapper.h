@@ -91,14 +91,17 @@ class SequentialKeyframeMapper {
 
 
     //! Sequential params
-    // Number of adjacent frames.
-    int num_adjacent = 30;
+    // Number of adjacent frames. frames of 10 seconds.
+    int num_adjacent = 50;
 
     int num_keyframe_observations_max_ratio = 0.8;
     int num_keyframe_observations_min_ratio = 0.2;
 
     int num_keyframe_tris_observations_ratio = 0.2;
     int num_keyframe_tris_observations = 1000;
+    int gba_num_images_of_points = 2;
+    int num_point_vis_bins = 8;
+    bool gba_use_keyframe = false;
 
 
     // Method to find and select next best image to register.
@@ -195,6 +198,10 @@ class SequentialKeyframeMapper {
   bool AdjustGlobalBundle(const Options& options,
                           const BundleAdjustmentOptions& ba_options);
 
+  std::unordered_set<image_t> FindEssentialGraphBasedCompleteness(const Options& options, const std::unordered_set<point3D_t>& point3d_ids);
+
+
+
   // Filter images and point observations.
   size_t FilterImages(const Options& options);
   size_t FilterPoints(const Options& options);
@@ -215,7 +222,7 @@ class SequentialKeyframeMapper {
   void ClearModifiedPoints3D();
 
   void InitImageOrderBasedImageName();
-  float CalculateOrderDistance(const image_t image_id1, const image_t image_id2);
+  float CalculateOrderDistance(const image_t image_id1, const image_t image_id2) const;
   bool CheckKeyframe(const Options& options, const image_t image_id, const size_t num_tris);
   void SetKeyframe(const image_t image_id);
   void DeleteKeyframe(const image_t image_id);

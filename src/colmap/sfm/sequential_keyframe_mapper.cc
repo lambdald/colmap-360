@@ -253,7 +253,7 @@ std::vector<image_t> SequentialKeyframeMapper::FindNextImages(const Options& opt
     // If image has been filtered or failed to register, place it in the
     // second bucket and prefer images that have not been tried before.
     const float rank = rank_image_func(image.second);
-    if (filtered_images_.count(image.first) == 0 && num_reg_trials == 0 && min_order_distance_to_reg_scene < options.num_adjacent) {
+    if (filtered_images_.count(image.first) == 0 && num_reg_trials == 0 && min_order_distance_to_reg_scene > options.num_adjacent) {
       image_ranks.emplace_back(image.first, rank);
     } else {
       other_image_ranks.emplace_back(image.first, rank);
@@ -689,9 +689,26 @@ bool SequentialKeyframeMapper::AdjustGlobalBundle(
     const Options& options, const BundleAdjustmentOptions& ba_options) {
   CHECK_NOTNULL(reconstruction_);
 
-  const std::vector<image_t>& reg_image_ids = reconstruction_->RegImageIds();
+  std::unordered_set<image_t> essential_image_ids;
+  if (options.gba_use_keyframe) {
+    LOG(INFO) << "+> use key frame.";
+    essential_image_ids = keyframe_ids_;
+  } else {
+    LOG(INFO) << "+> use essential views.";
+    essential_image_ids = FindEssentialGraphBasedCompleteness(options, reconstruction_->Point3DIds());
+  }
 
-  CHECK_GE(reg_image_ids.size(), 2) << "At least two images must be "
+
+  if (essential_image_ids.empty())
+  {
+    auto reg_image_ids = reconstruction_->RegImageIds();
+    essential_image_ids = std::unordered_set<image_t>(reg_image_ids.begin(), reg_image_ids.end());
+  }
+
+  
+  LOG(INFO) << "=> Essential Graph with " << essential_image_ids.size() << "/" << reconstruction_->NumRegImages() << " images";
+
+  CHECK_GE(essential_image_ids.size(), 2) << "At least two images must be "
                                        "registered for global "
                                        "bundle-adjustment";
 
@@ -700,13 +717,13 @@ bool SequentialKeyframeMapper::AdjustGlobalBundle(
 
   // Configure bundle adjustment.
   BundleAdjustmentConfig ba_config;
-  for (const image_t image_id : reg_image_ids) {
+  for (const image_t image_id : essential_image_ids) {
     ba_config.AddImage(image_id);
   }
 
   // Fix the existing images, if option specified.
   if (options.fix_existing_images) {
-    for (const image_t image_id : reg_image_ids) {
+    for (const image_t image_id : essential_image_ids) {
       if (existing_image_ids_.count(image_id)) {
         ba_config.SetConstantCamPose(image_id);
       }
@@ -714,23 +731,160 @@ bool SequentialKeyframeMapper::AdjustGlobalBundle(
   }
 
   // Fix 7-DOFs of the bundle adjustment problem.
-  ba_config.SetConstantCamPose(reg_image_ids[0]);
+  ba_config.SetConstantCamPose(*essential_image_ids.begin());
   if (!options.fix_existing_images ||
-      !existing_image_ids_.count(reg_image_ids[1])) {
-    ba_config.SetConstantCamPositions(reg_image_ids[1], {0});
+      !existing_image_ids_.count(*essential_image_ids.begin())) {
+    ba_config.SetConstantCamPositions(*(++essential_image_ids.begin()), {0});
   }
 
   // Run bundle adjustment.
   BundleAdjuster bundle_adjuster(ba_options, ba_config);
   if (!bundle_adjuster.Solve(reconstruction_.get())) {
+    LOG(INFO) << "No residuals";
     return false;
   }
+
+
+  if (essential_image_ids.size() != reconstruction_->RegImageIds().size()) {
+    std::unordered_set<image_t> non_essential_image_ids;
+    for(auto image_id: reconstruction_->RegImageIds()){
+      if (essential_image_ids.count(image_id) ==0) {
+        non_essential_image_ids.insert(image_id);
+      }
+    }
+
+    // Configure bundle adjustment.
+    BundleAdjustmentConfig ba_config_local;
+    for (const image_t image_id : reconstruction_->RegImageIds()) {
+      ba_config_local.AddImage(image_id);
+    }
+
+    // Fix the essential images.
+    for (const image_t image_id : essential_image_ids) {
+      ba_config_local.SetConstantCamPose(image_id);
+    }
+
+    for(const point3D_t point_id: reconstruction_->Point3DIds()) {
+      ba_config_local.AddConstantPoint(point_id);
+    }
+
+    LOG(INFO) << "+> local ba of gba";
+    // Run bundle adjustment.
+    BundleAdjuster bundle_adjuster_local(ba_options, ba_config_local);
+    if (!bundle_adjuster_local.Solve(reconstruction_.get())) {
+      return false;
+    }
+
+  }
+
 
   // Normalize scene for numerical stability and
   // to avoid large scale changes in viewer.
   reconstruction_->Normalize();
 
   return true;
+}
+
+std::unordered_set<image_t> SequentialKeyframeMapper::FindEssentialGraphBasedCompleteness(
+  const Options& options, 
+  const std::unordered_set<point3D_t>& point3d_ids) {
+  std::unordered_map<point3D_t, size_t> point3d_track_lens;
+  for(point3D_t point_id: point3d_ids) {
+    auto point3d = reconstruction_->Point3D(point_id);
+    point3d_track_lens[point_id] = point3d.track.Length();
+  }
+
+  std::vector<std::pair<point3D_t, size_t>> point3d_tracks(
+      point3d_track_lens.begin(), point3d_track_lens.end());
+  std::sort(point3d_tracks.begin(),
+            point3d_tracks.end(),
+            [](const std::pair<point3D_t, size_t>& point1,
+               const std::pair<point3D_t, size_t>& point2) {
+              return point1.second < point2.second;
+            });
+
+
+  std::unordered_set<image_t> essential_image_ids;
+
+  for(auto point_track: point3d_tracks){
+    auto point3d = reconstruction_->Point3D(point_track.first);
+
+    std::unordered_map<image_t, double> vis_angles;
+    for(auto track: point3d.track.Elements()) {
+      auto image_id = track.image_id;
+
+      auto& image = reconstruction_->Image(image_id);
+      if (!image.IsRegistered()) {
+        continue;
+      }
+      auto view_dir = (point3d.xyz - image.ProjectionCenter()).normalized();
+      auto normal_dir = point3d.xyz.normalized();
+
+      vis_angles[image_id] = std::acos(view_dir.dot(normal_dir));
+    }
+
+    if (vis_angles.size() < options.gba_num_images_of_points) {
+      for(auto pair: vis_angles) {
+        essential_image_ids.insert(pair.first);
+      }
+    } else {
+
+      std::vector<std::vector<std::pair<image_t, size_t>>> angle_bins(options.num_point_vis_bins);
+      double angle_step = M_PI / options.num_point_vis_bins;
+      for(auto pair: vis_angles) {
+        int bin_idx = static_cast<int>(pair.second / angle_step) % options.num_point_vis_bins;
+        angle_bins[bin_idx].push_back(std::make_pair(pair.first, reconstruction_->Image(pair.first).Point3DVisibilityScore()));
+      }
+      int num_valid_bin = 0;
+      for (auto& bin: angle_bins) {
+        if(!bin.empty()) {
+          num_valid_bin += 1;
+        }
+      }
+
+      const int num_image_per_bin = (options.gba_num_images_of_points + num_valid_bin - 1) / num_valid_bin;
+      for(auto& bin: angle_bins) {
+        if (bin.empty()) {
+          continue;
+        }
+        
+        int num_to_add = num_image_per_bin;
+
+        std::vector<std::pair<image_t, size_t>> bin_to_sort;
+        for (auto pair: bin) {
+          if (essential_image_ids.count(pair.first) > 0 ) {
+            num_to_add -= 1;
+          } else {
+            bin_to_sort.push_back(pair);
+          }
+        }
+
+        if (bin_to_sort.empty() || num_to_add < 1) {
+          continue;
+        }
+
+        std::sort(bin_to_sort.begin(), bin_to_sort.end(),
+          [](const std::pair<image_t, size_t>& image1, const std::pair<image_t, size_t>& image2) {
+            return image1.second > image2.second;
+          });
+
+        for(size_t i = 0; i < bin_to_sort.size(); i++) {
+          if(i < num_to_add) {
+            essential_image_ids.insert(bin_to_sort[i].first);
+          } else {
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  // if (essential_image_ids.empty()) {
+  //   auto image_ids = reconstruction_->RegImageIds();
+  //   return  std::unordered_set<image_t>(image_ids.begin(), image_ids.end());
+  // }
+
+  return essential_image_ids;
 }
 
 size_t SequentialKeyframeMapper::FilterImages(const Options& options) {
@@ -802,8 +956,8 @@ void SequentialKeyframeMapper::InitImageOrderBasedImageName() {
   max_reg_image_order_ = std::numeric_limits<size_t>::min();
 }
 
-float SequentialKeyframeMapper::CalculateOrderDistance(const image_t image_id1, const image_t image_id2) {
-  return std::abs(1.0*image_orders_[image_id1]-1.0*image_orders_[image_id2]);
+float SequentialKeyframeMapper::CalculateOrderDistance(const image_t image_id1, const image_t image_id2) const {
+  return std::abs(1.0*image_orders_.at(image_id1)-1.0*image_orders_.at(image_id2));
 }
 
 
@@ -815,9 +969,7 @@ bool SequentialKeyframeMapper::CheckKeyframe(const Options &options, const image
   bool is_keyframe = false;
   const auto &image = reconstruction_->Image(image_id);
 
-  if (num_tris > options.num_keyframe_tris_observations_ratio * image.NumObservations() ||
-      image.NumVisiblePoints3D() < options.num_keyframe_observations_min_ratio * image.NumObservations() ||
-      image.NumVisiblePoints3D() > options.num_keyframe_observations_max_ratio * image.NumObservations() ||
+  if (image.NumVisiblePoints3D() < options.num_keyframe_observations_min_ratio * image.NumObservations() ||
       num_tris > options.num_keyframe_tris_observations
   ) {
     is_keyframe = true;
@@ -938,6 +1090,11 @@ std::vector<image_t> SequentialKeyframeMapper::FindSecondInitialImage(
   std::vector<ImageInfo> image_infos;
   image_infos.reserve(reconstruction_->NumImages());
   for (const auto elem : num_correspondences) {
+
+    if (CalculateOrderDistance(image_id1, elem.first) < options.num_adjacent) {
+      continue;
+    }
+
     if (elem.second >= init_min_num_inliers) {
       const class Image& image = reconstruction_->Image(elem.first);
       const struct Camera& camera = reconstruction_->Camera(image.CameraId());

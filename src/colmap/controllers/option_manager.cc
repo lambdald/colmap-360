@@ -111,6 +111,8 @@ void OptionManager::ModifyForVideoData() {
   sequential_keyframe_mapper->min_focal_length_ratio = 0.1;
   sequential_keyframe_mapper->max_focal_length_ratio = 10;
   sequential_keyframe_mapper->max_extra_param = std::numeric_limits<double>::max();
+
+  sequential_keyframe_mapper->mapper.abs_pose_min_inlier_ratio /= 2;
 }
 
 void OptionManager::ModifyForInternetData() {
