@@ -305,22 +305,22 @@ void SequentialKeyframeMapperController::Run() {
   const float kMinNumRegImageRatio = 0.2;
   const int kMinNumRegImage = database_cache_->NumImages() * kMinNumRegImageRatio;
   for (size_t i = 0; i < kNumInitRelaxations; ++i) {
-    if (IsStopped()) {
-      break;
-    }
+    // if (IsStopped()) {
+    //   break;
+    // }
 
-    if(reconstruction_manager_->Size() > 0 && reconstruction_manager_->Get(0)->NumRegImages() > kMinNumRegImage) {
-        break;
-    }
+    // if(reconstruction_manager_->Size() > 0 && reconstruction_manager_->Get(0)->NumRegImages() > kMinNumRegImage) {
+    //     break;
+    // }
 
-    if (reconstruction_manager_->Size() > 0) {
-      reconstruction_manager_->Clear();
-    }
+    // if (reconstruction_manager_->Size() > 0) {
+    //   reconstruction_manager_->Clear();
+    // }
 
 
-    LOG(INFO) << "=> Relaxing the initialization constraints [init_min_num_inliers].";
-    init_mapper_options.init_min_num_inliers /= 2;
-    Reconstruct(init_mapper_options);
+    // LOG(INFO) << "=> Relaxing the initialization constraints [init_min_num_inliers].";
+    // init_mapper_options.init_min_num_inliers /= 2;
+    // Reconstruct(init_mapper_options);
 
     if (IsStopped()) {
       break;
@@ -351,8 +351,6 @@ void SequentialKeyframeMapperController::Run() {
     LOG(INFO) << "=> Relaxing the initialization constraints [num_adjacent].";
     init_mapper_options.num_adjacent /= 2;
     Reconstruct(init_mapper_options);
-
-
   }
 
   GetTimer().PrintMinutes();

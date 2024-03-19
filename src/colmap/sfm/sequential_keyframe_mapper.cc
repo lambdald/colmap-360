@@ -1007,6 +1007,10 @@ std::vector<image_t> SequentialKeyframeMapper::FindFirstInitialImage(
       continue;
     }
 
+    if(image_orders_.at(image.first) < options.num_adjacent || image_orders_.at(image.first) > reconstruction_->NumImages() - options.num_adjacent) {
+      continue;
+    }
+
     // Only use images for initialization a maximum number of times.
     if (init_num_reg_trials_.count(image.first) &&
         init_num_reg_trials_.at(image.first) >= init_max_reg_trials) {
@@ -1092,6 +1096,10 @@ std::vector<image_t> SequentialKeyframeMapper::FindSecondInitialImage(
   for (const auto elem : num_correspondences) {
 
     if (CalculateOrderDistance(image_id1, elem.first) < options.num_adjacent) {
+      continue;
+    }
+
+    if(image_orders_.at(elem.first) < options.num_adjacent || image_orders_.at(elem.first) > reconstruction_->NumImages() - options.num_adjacent) {
       continue;
     }
 
