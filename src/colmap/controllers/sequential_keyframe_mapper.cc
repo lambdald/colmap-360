@@ -351,6 +351,22 @@ void SequentialKeyframeMapperController::Run() {
     LOG(INFO) << "=> Relaxing the initialization constraints [num_adjacent].";
     init_mapper_options.num_adjacent /= 2;
     Reconstruct(init_mapper_options);
+
+    if (IsStopped()) {
+      break;
+    }
+
+    if(reconstruction_manager_->Size() > 0 && reconstruction_manager_->Get(0)->NumRegImages() > kMinNumRegImage) {
+        break;
+    }
+
+    if (reconstruction_manager_->Size() > 0) {
+      reconstruction_manager_->Clear();
+    }
+
+    LOG(INFO) << "=> Relaxing the initialization constraints [init_min_num_inliers].";
+    init_mapper_options.init_min_num_inliers /= 2;
+    Reconstruct(init_mapper_options);
   }
 
   GetTimer().PrintMinutes();

@@ -521,6 +521,14 @@ bool SequentialKeyframeMapper::RegisterNextImage(const Options& options,
     return false;
   }
 
+  
+
+  // Check stable motion for sequential images
+  if(!CheckStableSequentialMotion(options, image)) {
+    LOG(INFO) << "non-stable motion " << image.ImageId();
+    return false;
+  }
+
   //////////////////////////////////////////////////////////////////////////////
   // Continue tracks
   //////////////////////////////////////////////////////////////////////////////
@@ -541,6 +549,115 @@ bool SequentialKeyframeMapper::RegisterNextImage(const Options& options,
     }
   }
 
+  return true;
+}
+
+
+
+bool SequentialKeyframeMapper::CheckStableSequentialMotion(const Options& options, const Image& image) const {
+  // find adjacent frames
+  int image_order = image_orders_.at(image.ImageId());
+
+
+  struct OrderedImageId{
+    int order;
+    image_t image_id;
+  };
+
+  OrderedImageId curr_image{image_order, image.ImageId()};
+
+
+  std::vector<OrderedImageId> reg_image_orders;
+
+  for(auto id: reconstruction_->RegImageIds()) {
+    assert(image_orders_.find(id) != image_orders_.end());
+    reg_image_orders.push_back(OrderedImageId{image_orders_.at(id), id});
+  }
+
+  std::sort(reg_image_orders.begin(), reg_image_orders.end(), [](const OrderedImageId& a, const OrderedImageId& b) {
+    return a.order < b.order;
+  });
+
+
+
+  int i = 0;
+  while(i < reg_image_orders.size()) {
+
+    int begin_id = i;
+    i = i + 1;
+    while(i < reg_image_orders.size() && reg_image_orders[i].order - reg_image_orders[i-1].order < options.num_stable_motion_adjacent) {
+      i += 1;
+    }
+
+    int end_id = i;
+
+
+
+    int begin_order = reg_image_orders[begin_id].order;
+    int end_order = reg_image_orders[end_id-1].order;
+
+    if (image_order > begin_order - options.num_stable_motion_adjacent && image_order < end_order + options.num_stable_motion_adjacent) {
+      // adjacent
+      std::vector<image_t> group;
+      image_t closest_id = reg_image_orders[begin_id].image_id;
+      for(int t = begin_id; t < end_id; t++) {
+        group.push_back(reg_image_orders[t].image_id);
+        if(CalculateOrderDistance(curr_image.image_id, closest_id) > CalculateOrderDistance(curr_image.image_id, reg_image_orders[t].image_id)) {
+          closest_id = reg_image_orders[t].image_id;
+        }
+      }
+
+
+      if (group.size() < 2){
+        continue;
+      }
+
+      std::pair<float, float> sum_angle_dists{0., 0.};
+      int sum_order_dist = 0;
+
+
+      for(int i = 1; i < group.size(); i++) {
+        int order_dist = CalculateOrderDistance(group[i-1], group[i]);
+
+        auto image1 = reconstruction_->Image(group[i-1]);
+        auto image2 = reconstruction_->Image(group[i]);
+
+        auto dir1 = image1.ViewingDirection();
+        auto dir2 = image2.ViewingDirection();
+
+        auto loc1 = image1.ProjectionCenter();
+        auto loc2 = image2.ProjectionCenter();
+
+        float angle = std::acos(dir1.dot(dir2));
+        float dist = (loc1-loc2).norm();
+
+        sum_angle_dists.first += angle;
+        sum_angle_dists.second += dist;
+        sum_order_dist += order_dist;
+      }
+
+      auto mean_angle = sum_angle_dists.first / sum_order_dist;
+      auto mean_dist = sum_angle_dists.second / sum_order_dist;
+
+
+      auto closest_image = reconstruction_->Image(closest_id);
+      int closest_dist = CalculateOrderDistance(curr_image.image_id, closest_id);
+
+
+      auto dir1 = image.ViewingDirection();
+      auto dir2 = closest_image.ViewingDirection();
+
+      auto loc1 = image.ProjectionCenter();
+      auto loc2 = closest_image.ProjectionCenter();
+
+      float angle = std::acos(dir1.dot(dir2)) / closest_dist;
+      float dist = (loc1-loc2).norm() / closest_dist;
+
+      if(angle > mean_angle * options.stable_motion_angle_ratio || dist > mean_dist * options.stable_motion_pos_ratio) {
+        return false;
+      }
+    }
+  }
   return true;
 }
 
