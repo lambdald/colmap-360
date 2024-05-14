@@ -103,6 +103,10 @@ class SequentialKeyframeMapper {
     int num_point_vis_bins = 8;
     bool gba_use_keyframe = false;
 
+    int num_stable_motion_adjacent = 5;
+    float stable_motion_angle_ratio = 5;
+    float stable_motion_pos_ratio = 3;
+
 
     // Method to find and select next best image to register.
     enum class ImageSelectionMethod {
@@ -226,6 +230,9 @@ class SequentialKeyframeMapper {
   bool CheckKeyframe(const Options& options, const image_t image_id, const size_t num_tris);
   void SetKeyframe(const image_t image_id);
   void DeleteKeyframe(const image_t image_id);
+
+  bool CheckStableSequentialMotion(const Options& options, const Image& image) const;
+
 
  private:
   // Find seed images for incremental reconstruction. Suitable seed images have
