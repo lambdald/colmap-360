@@ -727,6 +727,8 @@ void OptionManager::AddSequentialKeyframeMapperOptions() {
                               &sequential_keyframe_mapper->triangulation.ignore_two_view_tracks);
   AddAndRegisterDefaultOption("Mapper.num_adjacent", &sequential_keyframe_mapper->mapper.num_adjacent);
 
+  AddAndRegisterDefaultOption("Mapper.adjacent", &sequential_keyframe_mapper->mapper.adjacent);
+
 }
 
 

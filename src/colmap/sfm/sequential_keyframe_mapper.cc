@@ -253,7 +253,9 @@ std::vector<image_t> SequentialKeyframeMapper::FindNextImages(const Options& opt
     // If image has been filtered or failed to register, place it in the
     // second bucket and prefer images that have not been tried before.
     const float rank = rank_image_func(image.second);
-    if (filtered_images_.count(image.first) == 0 && num_reg_trials == 0 && min_order_distance_to_reg_scene > options.num_adjacent) {
+    if ((filtered_images_.count(image.first) == 0 && num_reg_trials == 0) && (
+        (options.adjacent && min_order_distance_to_reg_scene <= options.num_adjacent) ||
+        (!options.adjacent && min_order_distance_to_reg_scene > options.num_adjacent))) {
       image_ranks.emplace_back(image.first, rank);
     } else {
       other_image_ranks.emplace_back(image.first, rank);
@@ -1212,7 +1214,13 @@ std::vector<image_t> SequentialKeyframeMapper::FindSecondInitialImage(
   image_infos.reserve(reconstruction_->NumImages());
   for (const auto elem : num_correspondences) {
 
-    if (CalculateOrderDistance(image_id1, elem.first) < options.num_adjacent) {
+    auto order_distance = CalculateOrderDistance(image_id1, elem.first);
+
+    if (options.adjacent && order_distance > options.num_adjacent) {
+      continue;
+    }
+
+    if (!options.adjacent && order_distance <= options.num_adjacent) {
       continue;
     }
 

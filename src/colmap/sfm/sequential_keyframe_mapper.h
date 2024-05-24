@@ -107,6 +107,8 @@ class SequentialKeyframeMapper {
     float stable_motion_angle_ratio = 5;
     float stable_motion_pos_ratio = 3;
 
+    bool adjacent = false;
+
 
     // Method to find and select next best image to register.
     enum class ImageSelectionMethod {

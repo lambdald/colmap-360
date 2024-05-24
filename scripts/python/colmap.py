@@ -18,11 +18,12 @@ class ColmapConfig:
     colmap_bin: Path = Path("colmap")
     camera_model: Literal["OPENCV", "OPENCV_FISHEYE"] = "OPENCV"
     database_relpath: Path = Path("database.db")
-    block_size: int = 50
+    block_size: int = 100
     sparse_reldir: Path = Path("sparse")
     max_num_features: int = 4096
     camera_params: Optional[str] = None
-
+    max_image_size: int = 1920
+    num_adjacent: int = 50
 
 class ColmapRunner:
     config: ColmapConfig
@@ -53,6 +54,7 @@ class ColmapRunner:
             --ImageReader.single_camera_per_folder 1 \
             --ImageReader.camera_model {self.config.camera_model} \
             --SiftExtraction.max_num_features {self.config.max_num_features} \
+            --SiftExtraction.max_image_size {self.config.max_image_size} \
             """
 
         if mask_reldir is not None and (workspace / mask_reldir).exists():
@@ -124,6 +126,7 @@ class ColmapRunner:
         undistorted_colmap_reldir: Path,
         log_reldir: Path,
         failed_callback: Optional[Callable] = None,
+        scene: Literal['indoor', 'outdoor'] = 'outdoor'
     ):
 
         self.config.colmap_bin = COLMAP_DIR / "build/src/colmap/exe/colmap"
@@ -140,6 +143,7 @@ class ColmapRunner:
             --ImageReader.single_camera_per_folder 1 \
             --ImageReader.camera_model {self.config.camera_model} \
             --SiftExtraction.max_num_features {self.config.max_num_features} \
+            --SiftExtraction.max_image_size {self.config.max_image_size} \
             """
 
         if mask_reldir is not None and (workspace / mask_reldir).exists():
@@ -186,6 +190,13 @@ class ColmapRunner:
             --output_path {workspace /self.config.exp_reldir / self.config.sparse_reldir} \
             --Mapper.multiple_models 0 \
         """
+
+        if scene == 'indoor':
+            cmd_mapper += f' --Mapper.adjacent 1 --Mapper.num_adjacent {self.config.num_adjacent}'
+        elif scene == 'outdoor':
+            cmd_mapper += f' --Mapper.adjacent 0 --Mapper.num_adjacent {self.config.num_adjacent}'
+        else:
+            raise NotImplementedError
 
         run_cmd_with_log(
             cmd_mapper, "posing_mapper", log_dir=workspace / log_reldir, timeout=36000, failed_callback=failed_callback
@@ -285,9 +296,10 @@ class ColmapRunner:
 
 def main(
     data_dir: Path,
-    exp_name: Path = Path("baseline"),
+    exp_name: Path = Path("colmap"),
     version: Literal["baseline", "keyframe"] = "baseline",
-    num_features: int = 8192,
+    num_features: int = 4096,
+    scene: Literal['indoor', 'outdoor'] = 'outdoor',
 ):
 
     from logger import init_global_logger
@@ -298,7 +310,7 @@ def main(
     if version == "baseline":
         runner.run(data_dir, Path("images"), None, exp_name / Path("undistorted_colmap"), exp_name / Path("logs"))
     else:
-        runner.run_v2(data_dir, Path("images"), None, exp_name / Path("undistorted_colmap"), exp_name / Path("logs"))
+        runner.run_v2(data_dir, Path("images"), None, exp_name / Path("undistorted_colmap"), exp_name / Path("logs"), scene=scene)
 
 
 if __name__ == "__main__":
